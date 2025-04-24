@@ -94,6 +94,19 @@ contract TestParetoDollarQueue is Test, DeployScript {
     assertEq(queue.epochPending(queue.epochNumber()), 0, 'pending amount of latest epoch could not be 0 even after withdrawn all funds');
   }
 
+  function testPoCCollateralRemovalAfterInvest() external {
+    uint256 amount = 100e6;
+    uint256 uspAmount = _mintUSP(address(this), USDC, amount);
+
+    assertEq(queue.getTotalCollateralsScaled(), uspAmount, 'Total collateral is same as USP minted');
+
+    vm.startPrank(par.owner());
+    par.removeCollateral(USDC);
+    vm.stopPrank();
+
+    assertEq(queue.getTotalCollateralsScaled(), uspAmount, 'Total collateral amount become zero due to USDC removal');
+  }
+
   function testInitialize() external view {
     assertEq(queue.owner(), TL_MULTISIG, 'owner is wrong');
     assertEq(address(queue.par()), address(par), 'ParetoDollar address is wrong');
