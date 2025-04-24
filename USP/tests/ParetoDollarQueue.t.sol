@@ -52,6 +52,48 @@ contract TestParetoDollarQueue is Test, DeployScript {
     skip(100);
   }
 
+  function testPoCWrongEpochPendingDeductionAtRedeemFunds() external {
+    uint256 epoch = queue.epochNumber();
+
+    uint256 amount = 100e6;
+    // mint USP
+    _mintUSP(address(this), USDC, amount);
+    // manager deposits collateral in CV
+    uint256 trancheAmount = _depositFundsCV(FAS_USDC_CV, amount);
+
+    uint256 requestRedeemAmount = amount / 2;
+    
+    // Request half USP amount to redeem
+    _requestRedeemUSP(address(this), requestRedeemAmount);
+    assertEq(queue.epochPending(epoch), requestRedeemAmount);
+
+    // Stop epoch and increase epoch number;
+    _stopEpoch();
+
+    // Request remaining USP amount to redeem at new epoch
+    _requestRedeemUSP(address(this), amount - requestRedeemAmount);
+
+    assertEq(queue.epochNumber(), epoch + 1);
+    epoch = queue.epochNumber();
+
+    // manager request redeems
+    _requestRedeemCV(FAS_USDC_CV, trancheAmount);
+    // we start and then stop the CV epoch so we can claim the requested amount
+    _rollEpochCV(FAS_USDC_CV);
+
+    // claim the funds previously requested from CV
+    uint256 balPre = IERC20Metadata(USDC).balanceOf(address(queue));
+
+    _claimRedeemRequestCV(FAS_USDC_CV, queue.epochNumber() - 1);
+
+    assertApproxEqAbs(IERC20Metadata(USDC).balanceOf(address(queue)) - balPre, amount, 1, 'queue should bal eq to the amount redeemed');
+
+    assertEq(queue.getCollateralsYieldSourceScaled(FAS_USDC_CV), 0, 'Must be 0 since redeemed all funds from yield source');
+
+    assertEq(queue.epochPending(queue.epochNumber() - 1), 0, 'first epoch pending amount become 0');
+    assertEq(queue.epochPending(queue.epochNumber()), 0, 'pending amount of latest epoch could not be 0 even after withdrawn all funds');
+  }
+
   function testInitialize() external view {
     assertEq(queue.owner(), TL_MULTISIG, 'owner is wrong');
     assertEq(address(queue.par()), address(par), 'ParetoDollar address is wrong');
